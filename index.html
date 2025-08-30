@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Camera Capture & Upload</title>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; padding: 16px; text-align: center; }
+    video, canvas { width: 100%; max-width: 360px; border: 1px solid #ddd; border-radius: 12px; }
+    button { padding: 12px 18px; font-size: 16px; border-radius: 999px; border: 1px solid #ccc; background: #f7f7f7; }
+    .row { margin-top: 12px; }
+    .hint { font-size: 13px; color: #666; margin-top: 6px; }
+    .ok { color: #0a7; }
+    .err { color: #c00; }
+    .link { margin-top: 10px; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <h2>Camera Capture</h2>
+  <div class="hint">Allow camera access to continue.</div>
+
+  <div class="row">
+    <video id="video" playsinline autoplay></video>
+  </div>
+
+  <div class="row">
+    <button id="capture">📸 Capture & Upload</button>
+  </div>
+
+  <div class="row">
+    <canvas id="canvas" width="360" height="270" style="display:none;"></canvas>
+  </div>
+
+  <div id="status" class="hint"></div>
+  <div id="result" class="link"></div>
+
+  <script>
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const statusEl = document.getElementById("status");
+    const resultEl = document.getElementById("result");
+
+    async function initCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+        video.srcObject = stream;
+        statusEl.textContent = "Camera ready.";
+        statusEl.className = "hint ok";
+      } catch (err) {
+        statusEl.textContent = "Camera access denied or not supported: " + err.message;
+        statusEl.className = "hint err";
+      }
+    }
+
+    async function captureAndUpload() {
+      if (!video.srcObject) return alert("Camera not ready.");
+
+      const w = 720, h = 540;
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, w, h);
+
+      const blob = await new Promise(res => canvas.toBlob(res, "image/jpeg", 0.9));
+      if (!blob) return alert("Failed to capture image.");
+
+      statusEl.textContent = "Uploading...";
+      statusEl.className = "hint";
+
+      const form = new FormData();
+      form.append("photo", blob, "capture.jpg");
+
+      try {
+        const r = await fetch("/upload", { method: "POST", body: form });
+        const data = await r.json();
+        if (data.ok) {
+          statusEl.textContent = "Uploaded successfully.";
+          statusEl.className = "hint ok";
+          resultEl.innerHTML = `Saved: <a href="${data.url}" target="_blank">${location.origin}${data.url}</a>`;
+        } else {
+          throw new Error(data.error || "Upload failed");
+        }
+      } catch (e) {
+        statusEl.textContent = "Upload error: " + e.message;
+        statusEl.className = "hint err";
+      }
+    }
+
+    document.getElementById("capture").addEventListener("click", captureAndUpload);
+    initCamera();
+  </script>
+</body>
+</html>
